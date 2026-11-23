@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum SongStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+  ARCHIVED
+}
+
+model User {
+  id               String            @id @default(uuid()) @db.Uuid
+  email            String            @unique @db.VarChar(255)
+  passwordHash     String            @map("password_hash") @db.Text
+  displayName      String            @map("display_name") @db.VarChar(100)
+  role             Role              @default(USER)
+  avatarObjectKey  String?           @map("avatar_object_key") @db.Text
+  isActive         Boolean           @default(true) @map("is_active")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  songs            Song[]            @relation("SongOwner")
+  moderatedSongs   Song[]            @relation("SongModerator")
+  playlists        Playlist[]
+  favorites        Favorite[]
+  listeningHistory ListeningHistory[]
+
+  @@map("users")
+}
+
+model Genre {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(100)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  songs       Song[]
+
+  @@map("genres")
+}
+
+model Song {
+  id                String       @id @default(uuid()) @db.Uuid
+  ownerId           String       @map("owner_id") @db.Uuid
+  genreId           String       @map("genre_id") @db.Uuid
+  moderatedBy       String?      @map("moderated_by") @db.Uuid
+  title             String       @db.VarChar(200)
+  artist            String       @db.VarChar(150)
+  album             String?      @db.VarChar(150)
+  durationSeconds   Int          @map("duration_seconds")
+  audioObjectKey    String       @map("audio_object_key") @db.Text
+  coverObjectKey    String?      @map("cover_object_key") @db.Text
+  audioMimeType     String       @map("audio_mime_type") @db.VarChar(100)
+  audioSizeBytes    BigInt       @map("audio_size_bytes")
+  status            SongStatus   @default(PENDING)
+  rejectionReason   String?      @map("rejection_reason") @db.Text
+  moderatedAt       DateTime?    @map("moderated_at") @db.Timestamptz(6)
+  publishedAt      DateTime?    @map("published_at") @db.Timestamptz(6)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  owner             User         @relation("SongOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  genre             Genre        @relation(fields: [genreId], references: [id], onDelete: Restrict)
+  moderator         User?        @relation("SongModerator", fields: [moderatedBy], references: [id], onDelete: SetNull)
+  playlistSongs     PlaylistSong[]
+  favorites         Favorite[]
+  listeningHistory  ListeningHistory[]
+
+  @@index([status, publishedAt])
+  @@index([ownerId, createdAt])
+  @@index([genreId])
+  @@index([title])
+  @@map("songs")
+}
+
+model Playlist {
+  id          String         @id @default(uuid()) @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  name        String         @db.VarChar(150)
+  description String?        @db.Text
+  isPublic    Boolean        @default(false) @map("is_public")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  songs       PlaylistSong[]
+
+  @@index([userId, createdAt])
+  @@map("playlists")
+}
+
+model PlaylistSong {
+  playlistId String   @map("playlist_id") @db.Uuid
+  songId     String   @map("song_id") @db.Uuid
+  position   Int
+  addedAt    DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  song       Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@id([playlistId, songId])
+  @@unique([playlistId, position])
+  @@index([songId])
+  @@map("playlist_songs")
+}
+
+model Favorite {
+  userId    String   @map("user_id") @db.Uuid
+  songId    String   @map("song_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song      Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@id([userId, songId])
+  @@index([songId])
+  @@map("favorites")
+}
+
+model ListeningHistory {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  songId          String   @map("song_id") @db.Uuid
+  listenedSeconds Int      @default(0) @map("listened_seconds")
+  listenedAt      DateTime @default(now()) @map("listened_at") @db.Timestamptz(6)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song            Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@index([userId, listenedAt])
+  @@index([songId])
+  @@map("listening_history")
+}
